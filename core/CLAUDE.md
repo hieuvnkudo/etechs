@@ -4,141 +4,113 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-High-performance FastAPI backend with SQLModel ORM, following a strict feature-based architecture. The project uses **uv** as package manager and follows a **Repository-Service-Router** pattern for each feature.
+This is a **FastAPI-based asynchronous API** built with Python 3.12, using **Clean Architecture** principles with a **feature-oriented modular design**. Each feature is self-contained with its own models, repository, service, and router layers.
 
-**Tech Stack:** FastAPI + SQLModel + SQLAlchemy (async) + uv + pytest + structlog
+## Tech Stack
 
-**Language:** Code & commits in English. Explanations in Vietnamese when needed.
+- **Package Manager:** `uv` (fast alternative to pip/poetry)
+- **Framework:** FastAPI 0.127+ with async/await throughout
+- **ORM:** SQLModel (combines SQLAlchemy + Pydantic)
+- **Databases:** PostgreSQL (production), SQLite (dev/testing)
+- **Testing:** pytest with pytest-asyncio, httpx for integration tests
+- **Logging:** structlog for structured logging
 
-## Development Commands
+## Commands
 
 ```bash
-# Install dependencies
-uv sync
+# Setup
+uv sync                              # Install dependencies
 
-# Run development server (hot reload)
-uv run fastapi dev app/main.py
+# Development
+uv run fastapi dev app/main.py       # Hot-reload dev server
 
-# Run tests
-uv run pytest                  # All tests
-uv run pytest -v              # Verbose output
-uv run pytest tests/test_todo.py  # Single test file
+# Testing
+uv run pytest                        # All tests
+uv run pytest -v                     # Verbose output
+uv run pytest tests/test_todo.py     # Single test file
+uv run pytest --cov=app              # With coverage
 
-# Linting (if ruff is configured)
-uv run ruff check . --fix
+# Production
+uv run fastapi run app/main.py       # Production server
 ```
-
-**API Documentation:** `http://localhost:8000/docs` (Swagger UI)
 
 ## Architecture
 
-### Feature-Based Structure
+### Feature Module Structure
 
-Each feature follows a **4-layer architecture** in `app/features/<feature>/`:
+Each feature in `app/features/<feature_name>/` follows this layered architecture:
 
 ```
-app/features/todo/
-├── models.py       # SQLModel table + Pydantic schemas (Create/Update)
-├── repository.py   # Database CRUD operations (AsyncSession)
-├── service.py      # Business logic + logging
-└── router.py       # FastAPI routes + dependency injection
+features/<feature_name>/
+├── models.py       # SQLModel schemas & database models
+├── repository.py   # Data access layer (database operations)
+├── service.py      # Business logic layer
+└── router.py       # API endpoints (FastAPI routes)
 ```
 
-**Dependency Flow:** Router → Service → Repository → Database
+**Key principle:** Dependencies flow inward - Router depends on Service, Service depends on Repository. This enables easy testing and maintainability.
 
-**Key Pattern:**
-- `models.py`: Defines `<Model>`, `<Model>Create`, `<Model>Update`
-- `repository.py`: Wraps AsyncSession, implements `create()`, `get_all()`, `get_by_id()`, `update()`, `delete()`
-- `service.py`: Orchestrates repository calls, adds business logic and structured logging
-- `router.py`: FastAPI endpoints with `Depends()` for dependency injection
+### Request Flow
 
-### Database & Async
+1. **Router** (`router.py`): Receives HTTP request, validates via Pydantic models
+2. **Service** (`service.py`): Implements business logic, calls repository
+3. **Repository** (`repository.py`): Executes database queries with AsyncSession
+4. **Response**: Flows back through layers with proper status codes
 
-- **Session Management:** `app/database.py` provides `get_session()` dependency
-- **Engine:** Created from `settings.database_url` (supports PostgreSQL + SQLite)
-- **Testing:** Uses `sqlite+aiosqlite:///:memory:` with fixture overrides in `tests/conftest.py`
-- **Table Creation:** `create_db_and_tables()` in lifespan context (`app/main.py`)
+### Dependency Injection
 
-**Important:** When adding new models, import them in `app/database.py:create_db_and_tables()` to ensure tables are created.
+Services and repositories are injected via FastAPI's dependency system:
+```python
+# In router.py
+@router.post("/")
+async def create_todo(
+    todo: TodoCreate,
+    session: AsyncSession = Depends(get_session),
+    service: TodoService = Depends(todo_service)
+):
+    return await service.create(todo, session)
+```
 
-### Settings & Configuration
+### Testing Strategy
 
-- **File:** `app/settings.py` - Pydantic Settings with `.env` support
-- **Defaults:** `app_name="Food Delivery API"`, `database_url="sqlite+aiosqlite:///database.db"`, `debug=True`
-- **Override:** Create `.env` file to change values
+- **SQLite in-memory** database for tests (configured in `tests/conftest.py`)
+- **Dependency override** pattern replaces real database session with test session
+- **Fixtures** provide reusable test setup (`session`, `client`)
+- Tests use **httpx AsyncClient** with ASGI transport for real API calls
+
+### Database Layer
+
+- **AsyncSession** from `sqlmodel.ext.asyncio` for all database operations
+- **Connection pooling** managed by SQLAlchemy engine
+- **Lifespan context** in `app/main.py` creates tables on startup
+- **No migrations** currently - tables are created via `SQLModel.metadata.create_all()`
+
+### Adding New Features
+
+1. Create directory: `app/features/<feature_name>/`
+2. Define models in `models.py` (inherit from `SQLModel`)
+3. Implement repository pattern in `repository.py`
+4. Build service layer in `service.py`
+5. Create router in `router.py` with proper dependency injection
+6. Register router in `app/main.py`: `app.include_router(router)`
+7. Write tests in `tests/test_<feature_name>.py`
+
+### Configuration
+
+- **Settings** in `app/settings.py` using Pydantic Settings
+- **Environment variables** via `.env` file or system environment
+- **Defaults** defined in settings class for local development
+- Key settings: `DATABASE_URL`, `APP_NAME`, `DEBUG`
 
 ### Logging
 
-- **Library:** `structlog` with contextvars for request-scoped logging
-- **Middleware:** `app/middleware.py` binds `request_id`, `method`, `path` to context
-- **Service Layer:** Use `logger.info()`, `logger.warning()` with structured fields
+- **structlog** configured in `app/logging.py`
+- **JSON format** in production for centralized logging
+- **Request middleware** (`app/middleware.py`) adds unique request IDs
+- **Structured context** includes request_id, path, method, status
 
-### Testing Architecture
+### Docker Support
 
-**Test Database:** SQLite in-memory, isolated per test session
-
-**Fixtures (`tests/conftest.py`):**
-- `session` - AsyncSession with auto-create/drop tables
-- `client` - httpx AsyncClient with `get_session` override
-- `event_loop` - AsyncIO event loop management
-- `close_engine` - Engine disposal after all tests
-
-**Test Pattern:**
-1. Use `client` fixture for API tests
-2. Use `session` fixture for direct DB tests
-3. All tests are async - use `async def test_*()`
-
-## Adding a New Feature
-
-1. **Create directory:** `app/features/<feature>/`
-2. **Define models** in `models.py` (Table + Create/Update schemas)
-3. **Implement repository** with CRUD methods
-4. **Implement service** with business logic and logging
-5. **Create router** with FastAPI endpoints and dependency injection
-6. **Register router** in `app/main.py` (add import + `app.include_router()`)
-7. **Import model** in `app/database.py:create_db_and_tables()`
-8. **Write tests** in `tests/test_<feature>.py`
-
-## Critical Implementation Details
-
-### Dependency Injection Pattern
-
-```python
-# router.py
-async def get_feature_service(session: AsyncSession = Depends(get_session)) -> FeatureService:
-    repository = FeatureRepository(session)
-    return FeatureService(repository)
-
-@router.post("/")
-async def create(data: FeatureCreate, service: FeatureService = Depends(get_feature_service)):
-    return await service.create(data)
-```
-
-### Repository Update Pattern
-
-Always use `model_dump(exclude_unset=True)` for partial updates:
-
-```python
-def update(self, db_obj: Model, update_data: ModelUpdate) -> Model:
-    update_dict = update_data.model_dump(exclude_unset=True)
-    for key, value in update_dict.items():
-        setattr(db_obj, key, value)
-    self.session.add(db_obj)
-    await self.session.commit()
-    await self.session.refresh(db_obj)
-    return db_obj
-```
-
-### Async Session Management
-
-- Never manually close sessions - use `async with` context or let fixtures handle it
-- Always `await session.commit()` after mutations
-- Always `await session.refresh(db_obj)` after commit to get DB-generated values
-
-## TDD Workflow
-
-1. **RED:** Write failing test in `tests/test_<feature>.py`
-2. **GREEN:** Implement minimal feature code to pass
-3. **REFACTOR:** Improve design while keeping tests green
-
-**Target:** 90%+ test coverage for new code
+- **Multi-stage build** in `Dockerfile` for optimized production images
+- **Non-root user** for security
+- **Hot-reload** via `compose.yml` for development
