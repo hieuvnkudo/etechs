@@ -1,0 +1,15 @@
+[project]
+name = "fd-api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "asyncpg>=0.31.0",
+    "fastapi[standard]>=0.127.0",
+    "pydantic-settings>=2.12.0",
+    "sqlalchemy[asyncio]>=2.0.45",
+    "sqlmodel>=0.0.29",
+    "structlog>=25.5.0",
+]
