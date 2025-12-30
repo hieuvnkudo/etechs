@@ -5,6 +5,7 @@ from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.core.database import get_session
 from app.features.todos.model import Todo  # noqa: F401
+from app.features.profiles.model import Profile  # noqa: F401
 
 
 # Tạo test database engine (in-memory)

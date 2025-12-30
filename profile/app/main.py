@@ -10,6 +10,7 @@ from app.core.exceptions import (
 )
 from app.core.health import router as health_router
 from app.features.todos import router as todos_router
+from app.features.profiles import router as profiles_router
 from app.middleware.request_id import RequestIDMiddleware
 from app.middleware.cors import setup_cors
 from contextlib import asynccontextmanager
@@ -18,6 +19,7 @@ import logging
 
 # Import models để đảm bảo chúng được đăng ký với SQLModel metadata
 from app.features.todos.model import Todo  # noqa: F401
+from app.features.profiles.model import Profile  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 # Đăng ký routers
 app.include_router(health_router)
 app.include_router(todos_router)
+app.include_router(profiles_router)
 
 
 @app.get("/", tags=["root"])

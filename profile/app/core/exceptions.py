@@ -34,7 +34,7 @@ class APIValidationError(BaseAPIException):
     """Exception cho validation errors"""
     def __init__(self, detail: str):
         super().__init__(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=detail,
             error_code="VALIDATION_ERROR",
         )
@@ -79,9 +79,9 @@ async def validation_exception_handler(
         f"Validation error: {errors}",
         extra={"path": request.url.path, "method": request.method},
     )
-    
+
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={
             "error": {
                 "code": "VALIDATION_ERROR",
